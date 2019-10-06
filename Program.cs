@@ -1,9 +1,7 @@
 ﻿using System;
 using System.IO;
-using System.Threading;
 using System.Linq;
 using System.Collections.Generic;
-using System.Collections;
 
 namespace FocusStart
 {
@@ -12,30 +10,35 @@ namespace FocusStart
         static void Main(string[] args)
         {
             CLP clp = new CLP();
-            clp.Parse(args);
+            CLArgs clargs = clp.Parse(args);
 
-            ThreadRunner thr = new ThreadRunner(clp.OutName, clp.Inputs);
-            //thr.Run();
-            thr.Merge(new MergeTask(clp.Inputs, clp.OutName));
+            ThreadRunner thr = new ThreadRunner(clargs);
+            thr.Merge(thr.Run());
 
-            //Console.ReadLine();
+            Logger.Free();
         }
     }
 
+    // структура для хранения аргументов командной строки
+    class CLArgs
+    {
+        public char order;
+        public char type;
+        public string output;
+        public string[] inputs;
+    }
+
+    // класс для парсинга параметров командной строки
     class CLP
     {
+        CLArgs clargs;
         private char order = 'n';
         private char type;
-        private string outName;
+        private string output;
         private int inputLength;
         private string[] inputs;
-        public char Order { get { return order; }  }
-        public char Type { get { return type; } }
-        public string OutName { get { return outName; } }
-        public int InputLength { get { return inputLength; } }
-        public string[] Inputs { get { return inputs; } }
 
-        public void Parse(string[] args)
+        public CLArgs Parse(string[] args)
         {
             int i = 0; // счетчик номера аргумента
             if ((args[0] == "-d") || (args[0] == "-a"))
@@ -44,37 +47,49 @@ namespace FocusStart
                 order = 'a';
 
             type = args[i++][1];
-            outName = args[i++];
+            output = args[i++];
 
             inputLength = args.Length - i;
             inputs = new string[inputLength];
             for (int j = i, k = 0; j < args.Length; j++, k++)
                 inputs[k] = args[j];
+
+            clargs = new CLArgs();
+            clargs.inputs = inputs;
+            clargs.output = output;
+            clargs.order = order;
+            clargs.type = type;
+            return clargs;
         } 
     }
 
+    // структура для обмена данными с генераторами
+    class ThreadData
+    {
+        public string name;
+        public string data;
+        public int index;
+    }
+
+    // класс-ядро, реализующий работу с генераторами и слияние
     class ThreadRunner
     {
-        static EventWaitHandle[] waitHandles; 
-        private string[] inputs;
-        private string output;
-        public string[] results;
+        CLArgs clargs;
+        public string[] results; // здесь хранятся строки, готовые для слияния
 
-        public ThreadRunner(string output, string[] inputs)
+        public ThreadRunner(CLArgs clargs)
         {
-            this.inputs = new string[inputs.Length];
-            this.inputs = inputs;
-            this.output = output;
-            results = new string[inputs.Length];
-            waitHandles = new EventWaitHandle[inputs.Length];
-            for (int i = 0; i < inputs.Length; i++)
-                waitHandles[i] = new AutoResetEvent(false);
+            this.clargs = new CLArgs();
+            this.clargs.inputs = new string[clargs.inputs.Length];
+            this.clargs = clargs;
+            results = new string[clargs.inputs.Length];
         }
 
-        public int FindMinIndex(List<PeekableScanner> collection)
+        // функция для определения индекса минимального элемента на текущем этапе слияния
+        public int FindMinElementIndex(string[] collection, char type)
         {
             int rIndex = 0;
-            for (int i = 0; i < collection.Count; i++)
+            for (int i = 0; i < collection.Length; i++)
             {
                 if (collection[i] == null)
                 {
@@ -82,262 +97,305 @@ namespace FocusStart
                         rIndex++;
                     continue;
                 }
-                    
-                if (collection[i].CompareTo(collection[rIndex]) < 0)
-                    rIndex = i;
+
+                if (type == 's')
+                {
+                    if (collection[i].CompareTo(collection[rIndex]) < 0)
+                        rIndex = i;
+                }
+
+                else
+                {
+                    if (Int32.Parse(collection[i]) < Int32.Parse(collection[rIndex]))
+                        rIndex = i;
+                }
             }
-            return (rIndex >= collection.Count) ? -1 : rIndex;
+            return (rIndex >= collection.Length) ? -1 : rIndex;
         }
 
-        //public void Run()
-        //{
-        //    for (int i = 0; i < inputs.Length; i++)
-        //    {
-        //        ThreadData td = new ThreadData();
-        //        td.input = inputs[i];
-        //        td.index = i;
-
-        //        Thread th = new Thread(ReadNext);
-        //        th.Start(td);
-        //        Thread.Sleep(50);
-        //    }
-
-        //    int k;
-        //    using (StreamWriter sw = new StreamWriter(output))
-        //        while (results.Any(x => x != null))
-        //        {
-        //            k = FindMinIndex(results);
-        //            sw.WriteLine(results[k]);
-        //            waitHandles[k].Set();
-        //        }
-        //}
-
-        public void Merge(MergeTask task)
+        // функция для определения индекса максимального элемента на текущем этапе слияния
+        public int FindMaxElementIndex(string[] collection, char type)
         {
-            //PeekableScanner smallest;
-
-            //using (StreamWriter sw = new StreamWriter(output))
-            //{
-            //    Queue<PeekableScanner> q = new Queue<PeekableScanner>(inputs.Length);
-            //    foreach(string input in inputs)
-            //    {
-            //        PeekableScanner ps = new PeekableScanner(input);
-            //        q.Enqueue(ps);
-            //    }
-
-            //    smallest = q.ToList<PeekableScanner>()[FindMinIndex(q.ToList<PeekableScanner>())];
-            //    while (smallest != null)
-            //    {
-            //        if (smallest.peek() != null)
-            //        {
-            //            sw.WriteLine(smallest.nextString());
-            //            Console.WriteLine(smallest.nextString());
-            //        }
-
-            //        if (smallest.hasNext())
-            //        {
-            //            q.Enqueue(smallest);
-            //        }
-            //    }
-
-            //    smallest = q.Dequeue();
-            //}
-            //Queue<MyScanner> scanner = new Queue<MyScanner>(inputs.Length);
-            //using (StreamWriter sw = new StreamWriter(output))
-            //{
-            //    int i = 0;
-            //    foreach (string input in inputs)
-            //    {
-            //        MyScanner ms = new MyScanner(input, i++);
-            //        scanner.Enqueue(ms);
-            //        foreach (string line in ms.GetEnum(input))
-            //        {
-            //            results[i] = line;
-            //        }
-            //    }
-
-
-            //}
-
-
-        }
-
-        public static IEnumerable<string> GetNextLine()
-        {
-            string line;
-            using (StreamReader sr = new StreamReader(""))
-                while ((line = sr.ReadLine()) != null)
-                    yield return line;
-            yield return null;
-        }
-
-        public void ReadNext(object threadData)
-        {
-            ThreadData td = new ThreadData();
-            td = (ThreadData)threadData;
-            string line;
-
-            using (StreamReader sr = new StreamReader(td.input))
+            int rIndex = collection.Length - 1;
+            for (int i = collection.Length - 1; i >= 0; i--)
             {
+                if (collection[i] == null)
+                {
+                    if (rIndex == i)
+                        rIndex--;
+                    continue;
+                }
+
+                if (type == 's')
+                {
+                    if (collection[i].CompareTo(collection[rIndex]) > 0)
+                        rIndex = i;
+                }
+
+                else
+                {
+                    if (Int32.Parse(collection[i]) > Int32.Parse(collection[rIndex]))
+                        rIndex = i;
+                }
+            }
+            return (rIndex >= collection.Length) ? -1 : rIndex;
+        }
+
+        // функция для создания генераторов, возвращает коллекцию их перечислителей
+        public List<IEnumerator<ThreadData>> Run()
+        {
+            // здесь храним перечислители генераторов
+            List<IEnumerator<ThreadData>> generators = new List<IEnumerator<ThreadData>>();
+            
+            // за один проход создаем генераторы и помещаем их в коллекцию
+            for (int i = 0; i < clargs.inputs.Length; i++)
+            {
+                ThreadData td = new ThreadData();
+                td.name = clargs.inputs[i];
+                td.index = i;
+
+                var generator = GetNextLine(td, clargs.type).GetEnumerator();
+                if (generator.MoveNext())
+                    generators.Add(generator);
+                results[i] = generator.Current.data;
+                generator.MoveNext();
+            }
+
+            return generators;
+        }
+
+        // функция слияния текущих данных из массива results в выходной файл
+        // не забываем вызывать MoveNext() у генератора, значение которого использовали
+        public void Merge(List<IEnumerator<ThreadData>> generators)
+        {
+            int k;
+            using (StreamWriter sw = new StreamWriter(clargs.output))
+                while (results.Any(x => x != null))
+                {
+                    // выбираем порядок сортировки
+                    k = (clargs.order == 'a') ? FindMinElementIndex(results, clargs.type)
+                        : FindMaxElementIndex(results, clargs.type);
+                    sw.WriteLine(results[k]);
+
+                    if (clargs.order == 'a')
+                    {
+                        if (clargs.type == 's')
+                        {
+                            while (String.Compare(results[k],
+                                generators[k].Current.data) > 0)
+                            {
+                                Logger.OrderError(generators[k].Current.name,
+                                    generators[k].Current.index, generators[k].Current.data);
+                                generators[k].MoveNext();
+                                if ((generators[k].Current.data) == null)
+                                    break;
+                            }
+                        }
+                        else
+                        {
+                            while (Int32.Parse(results[k]) > 
+                                Int32.Parse(generators[k].Current.data))
+                            {
+                                Logger.OrderError(generators[k].Current.name,
+                                    generators[k].Current.index, generators[k].Current.data);
+                                generators[k].MoveNext();
+                                if ((generators[k].Current.data) == null)
+                                    break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (clargs.type == 's')
+                        {
+                            try
+                            {
+                                while (String.Compare(results[k],
+                                generators[k].Current.data) < 0)
+                                {
+                                    Logger.OrderError(generators[k].Current.name,
+                                        generators[k].Current.index, generators[k].Current.data);
+                                    generators[k].MoveNext();
+                                    if ((generators[k].Current.data) == null)
+                                        break;
+                                }
+                            }
+                            catch
+                            {
+                                generators[k].Current.data = null;
+                            }
+                        }
+                        else
+                        {
+                            try
+                            {
+                                while (Int32.Parse(results[k]) <
+                                Int32.Parse(generators[k].Current.data))
+                                {
+                                    Logger.OrderError(generators[k].Current.name,
+                                        generators[k].Current.index, generators[k].Current.data);
+                                    generators[k].MoveNext();
+                                    if ((generators[k].Current.data) == null)
+                                        break;
+                                }
+                            }
+                            catch
+                            {
+                                generators[k].Current.data = null;
+                            }
+                        }
+                    }
+                    
+                    results[k] = generators[k].Current.data;
+                    if (!generators[k].MoveNext())
+                        generators[k] = null;
+                }
+        }
+
+        // выглядит как функция, а поведение как у итератора
+        // генератор отдает по одному значению за вызов
+        public static IEnumerable<ThreadData> GetNextLine(ThreadData input, char type)
+        {
+            int index = -1;
+            ThreadData response = new ThreadData();
+            response.name = input.name;
+            response.index = input.index;
+            string line;
+
+            using (StreamReader sr = new StreamReader(input.name))
                 while ((line = sr.ReadLine()) != null)
                 {
-                    lock (results)
+                    if (type == 'i')
                     {
-                        results[td.index] = line;
+                        try
+                        {
+                            Int32.Parse(line);
+                        }
+                        catch
+                        {
+                            Logger.ParseError(input.name, ++index, line);
+                            continue;
+                        }
                     }
-                    waitHandles[td.index].WaitOne();
+                    response.data = line;
+                    response.index = ++index;
+                    yield return response;
                 }
-                results[td.index] = null;
-            }
+
+            response.data = null;
+            yield return response;
         }
     }
 
-    public class ThreadData
+    // класс для записи ошибок
+    static class Logger
     {
-        public string input;
-        public int index; 
-    }
+        private static StreamWriter sr = new StreamWriter("log.txt");
+        private static int count = 0;
 
-    public class PeekableScanner : IComparable<PeekableScanner>
-    {
-        private Scanner scan;
-        private string next;
-
-        public PeekableScanner(string source)
+        public static void ParseError(string file, int index, string line)
         {
-            scan = new Scanner(source);
-            next = (scan.hasNext() ? scan.nextString() : null);
+            sr.WriteLine("Type error in row {0} in file \"{1}\": " +
+                "\"{2}\" is not an integer", index, file, line);
+            count++;
         }
 
-        public bool hasNext()
+        public static void OrderError(string file, int index, string line)
         {
-            return (next != null);
+            sr.WriteLine("Order error in row {0} in file \"{1}\": " +
+                "\"{2}\" is not in order", index + 1, file, line);
+            count++;
         }
 
-        public string nextString()
-        {
-            string current = next;
-            next = (scan.hasNext() ? scan.nextString() : null);
-            return current;
-        }
-
-        public string peek()
-        {
-            return next;
-        }
-
-        public int CompareTo(PeekableScanner other)
-        {
-            if (String.Compare(peek(), other.peek()) == 0)
-                return 0;
-            else if (String.Compare(peek(), other.peek()) > 0)
-                return 1;
-            else
-                return -1;
-        }
-    }
-
-    class Scanner : StringReader
-    {
-        string currentWord;
-        private string source;
-
-        public Scanner(string source) : base(source)
-        {
-            readNextWord();
-            this.source = source;
-        }
-
-        private void readNextWord()
-        {
-            //System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            //char nextChar;
-            //int next;
-            //do
-            //{
-            //    next = this.Read();
-            //    if (next < 0)
-            //        break;
-            //    nextChar = (char)next;
-            //    if (char.IsWhiteSpace(nextChar))
-            //        break;
-            //    sb.Append(nextChar);
-            //} while (true);
-            //while ((this.Peek() >= 0) && (char.IsWhiteSpace((char)this.Peek())))
-            //    this.Read();
-            //if (sb.Length > 0)
-            //    currentWord = sb.ToString();
-            //else
-            //    currentWord = null;
-            using (StreamReader sr = new StreamReader(source))
-            {
-                currentWord = sr.ReadLine() != null ? currentWord : null;
-            }
-        }
-
-        public bool hasNextInt()
-        {
-            if (currentWord == null)
-                return false;
-            int dummy;
-            return int.TryParse(currentWord, out dummy);
-        }
-
-        public int nextInt()
+        public static void Free()
         {
             try
             {
-                return int.Parse(currentWord);
+                sr.WriteLine("Total error amount: " + count.ToString());
+                sr.Dispose();
             }
-            finally
+            catch
             {
-                readNextWord();
+                throw new Exception();
             }
-        }
-
-        public string nextString()
-        {
-            try
-            {
-                return currentWord.ToString();
-            }
-            finally
-            {
-                readNextWord();
-            }
-        }
-
-        public bool hasNext()
-        {
-            return currentWord != null;
         }
     }
 
-    class MergeTask
+    public interface IStrategy
     {
-        string output;
-        List<string> inputs;
+        void ExternalPart();
+        void NestedPart();
+    }
 
-        public MergeTask(string[] inputs, string output)
+    public class AI : IStrategy
+    {
+        public void ExternalPart()
         {
-            this.output = output;
-            this.inputs = inputs.ToList();
+            NestedPart();
+        }
+        public void NestedPart()
+        {
+
         }
     }
 
-    //class MyScanner : IEnumerable
-    //{
-    //    string name;
-    //    int index;
+    public class AS : IStrategy
+    {
+        public void ExternalPart()
+        {
+            Console.WriteLine("Выполняется алгоритм стратегии 2.");
+        }
+        public void NestedPart()
+        {
+            Console.WriteLine("Выполняется алгоритм стратегии 1.");
+        }
+    }
 
-    //    IEnumerator IEnumerable.GetEnumerator()
-    //    {
-    //        //string line;
-    //        //using (StreamReader sr = new StreamReader(source))
-    //        //    while ((line = sr.ReadLine()) != null)
-    //        //        yield return line;
-    //        //yield return null;
-    //        return (IEnumerator) GetEnumerator();
-    //    }
-    //}
+    public class DI : IStrategy
+    {
+        public void ExternalPart()
+        {
+            Console.WriteLine("Выполняется алгоритм стратегии 2.");
+        }
+        public void NestedPart()
+        {
+            Console.WriteLine("Выполняется алгоритм стратегии 1.");
+        }
+    }
+
+    public class DS : IStrategy
+    {
+        public void ExternalPart()
+        {
+            Console.WriteLine("Выполняется алгоритм стратегии 2.");
+        }
+        public void NestedPart()
+        {
+            Console.WriteLine("Выполняется алгоритм стратегии 1.");
+        }
+    }
+
+    public class Context
+    {
+        private IStrategy _strategy;
+        private char type;
+        private char order;
+
+        public Context(char type, char order)
+        {
+            this.type = type;
+            this.order = order;
+        }
+
+        public void SetStrategy(IStrategy strategy)
+        {
+            _strategy = strategy;
+        }
+
+        public void ExecuteOperation()
+        {
+            _strategy.ExternalPart();
+            _strategy.NestedPart();
+        }
+    }
 }
